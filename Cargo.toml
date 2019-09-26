@@ -1,0 +1,9 @@
+[package]
+name = "enkivm"
+version = "0.1.0"
+authors = ["Reed Oei <oei.reed@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+num-bigint = "0.2"
+
