@@ -111,6 +111,12 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
     return Ok(());
 }
 
+fn process_str_const(str: &String) -> String {
+    return str.replace("\\n", "\n")
+              .replace("\\t", "\t")
+              .replace("\\r", "\r");
+}
+
 fn load_instrs(filename: String) -> Option<Vec<Instr>> {
     let file = File::open(filename).unwrap(); // TODO: Handle this better
     let reader = BufReader::new(file);
@@ -133,7 +139,8 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
         } else if opcode == "int" {
             instrs.push(Instr::Int(BigInt::parse_bytes(split[1].as_bytes(), 10).unwrap()));
         } else if opcode == "str" {
-            instrs.push(Instr::Str(split[1].to_string()));
+            let str_const = process_str_const(&(line_str["str".len() + 1..line_str.len()]).to_string());
+            instrs.push(Instr::Str(str_const));
         } else if opcode == "goto" {
             instrs.push(Instr::Goto);
         } else if opcode == "gotochoice" {
@@ -178,6 +185,7 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             Some(idx) => {
                 instrs.insert(insert_pos, Instr::Int(BigInt::from(*idx)));
             }
+
             None => {
                 println!("Unknown label: {}", label_name);
                 error = true;

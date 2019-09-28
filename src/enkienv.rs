@@ -50,7 +50,16 @@ impl Environment {
     }
 
     pub fn print(&mut self) -> Result<(), Err> {
-        print!("{}", self.pop()?);
+        match self.pop()? {
+            StackItem::Variable(var_name) => {
+                match self.var_value_opt(&var_name)? {
+                    Some(val) => print!("{}", val),
+                    None => print!("{}", var_name)
+                }
+            },
+
+            StackItem::Value(val) => print!("{}", val)
+        }
 
         return Ok(());
     }

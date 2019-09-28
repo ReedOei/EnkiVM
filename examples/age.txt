@@ -23,6 +23,7 @@ goto
 
 :age_fact_2
 pop
+pop
 goto
 
 :main
@@ -38,3 +39,11 @@ position age
 goto
 
 :aftercall
+var name
+print
+str \n
+print
+var age
+print
+str \n
+print
