@@ -22,7 +22,7 @@ fn le_bytes_to_usize(le_bytes: Vec<u8>) -> Result<usize, Err> {
     }
 
     let mut new_arr = [0; 8];
-    for i in 0..le_bytes.len() - 1 {
+    for i in 0..le_bytes.len() {
         new_arr[i] = le_bytes[i];
     }
 
@@ -37,6 +37,16 @@ impl Environment {
             choicepoint: None,
             fresh_counter: 0
         }
+    }
+
+    pub fn swap(&mut self) -> Result<(), Err> {
+        let item1 = self.pop()?;
+        let item2 = self.pop()?;
+
+        self.push(item1)?;
+        self.push(item2)?;
+
+        return Ok(());
     }
 
     pub fn push(&mut self, new_item: StackItem) -> Result<(), Err> {
@@ -56,7 +66,7 @@ impl Environment {
         return Ok(());
     }
 
-    fn var_value(&self, var_name: &String) -> Result<Value, Err> {
+    fn var_value_opt(&self, var_name: &String) -> Result<Option<Value>, Err> {
         let mut to_check = VecDeque::new();
         to_check.push_front(var_name);
         let mut checked = HashSet::new();
@@ -72,7 +82,7 @@ impl Environment {
                     let unification = self.get_unified(var_name)?;
 
                     match &unification.value_unify {
-                        Some(c) => return Ok(c.clone()),
+                        Some(c) => return Ok(Some(c.clone())),
                         None => {}
                     }
 
@@ -83,20 +93,26 @@ impl Environment {
             }
         }
 
-        return Err::err_res(format!("No value found for: {}", var_name));
+        return Ok(None);
     }
 
-    pub fn functor(&mut self, num: usize) -> Result<(), Err> {
-        let mut items = Vec::new();
+    fn var_value(&self, var_name: &String) -> Result<Value, Err> {
+        return self.var_value_opt(var_name)?.ok_or(Err::new(format!("No value found for: {}", var_name)));
+    }
 
-        for _i in 0..num {
-            items.push(self.pop()?);
-        }
+    pub fn functor(&mut self) -> Result<(), Err> {
+        let mut items = Vec::new();
 
         let name = match self.pop()? {
             StackItem::Value(Value::StringValue(s)) => s,
             item => return Err::err_res(format!("Functor name must be a string. Got: {:?}", item))
         };
+
+        let num = self.popidx()?;
+
+        for _i in 0..num {
+            items.push(self.pop()?);
+        }
 
         self.push(StackItem::Value(Value::Functor(name, items)))?;
 
@@ -110,7 +126,7 @@ impl Environment {
         }
     }
 
-    pub fn project(&mut self) -> Result<(), Err> {
+    pub fn popidx(&mut self) -> Result<usize, Err> {
         let index = match self.pop()? {
             StackItem::Value(Value::IntValue(idx)) => idx,
             StackItem::Variable(var_name) => {
@@ -128,14 +144,18 @@ impl Environment {
             return Err::err_res("Functor indices must be nonnegative integers!".to_string());
         }
 
-        let idx: usize = le_bytes_to_usize(le_bytes)?;
+        return Ok(le_bytes_to_usize(le_bytes)?);
+    }
+
+    pub fn project(&mut self) -> Result<(), Err> {
+        let idx: usize = self.popidx()?;
 
         match self.pop()? {
             StackItem::Value(Value::Functor(_, args)) => {
                 if idx < args.len() {
                     self.push(args[idx].clone())?;
                 } else {
-                    return Err::err_res(format!("Functor has {} arguments, but tried to access index {}", args.len(), index));
+                    return Err::err_res(format!("Functor has {} arguments, but tried to access index {}", args.len(), idx));
                 }
             }
             item => return Err::err_res(format!("Cannot index into a non-functor: {:?}", item))
@@ -315,6 +335,22 @@ impl Environment {
             self.ensure_unification_exists(&v1)?;
             self.ensure_unification_exists(&v2)?;
 
+            match (self.var_value_opt(&v1)?, self.var_value_opt(&v2)?) {
+                (Some(Value::Functor(name1, args1)), Some(Value::Functor(name2, args2))) => {
+                    if name1 != name2 {
+                        return Err::err_res(format!("Cannot unify {} and {}: functor names {} and {} don't match", v1, v2, name1, name2));
+                    }
+
+                    for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                        self.unify_items(arg1.clone(), arg2.clone())?;
+                    }
+
+                    return Ok(());
+                }
+
+                _ => {}
+            }
+
             self.unify_with(&v1, &v2)?;
             self.unify_with(&v2, &v1)?;
         }
@@ -325,39 +361,68 @@ impl Environment {
     fn unify_var_value(&mut self, v: String, c: Value) -> Result<(), Err> {
         self.ensure_unification_exists(&v)?;
 
+        match (self.var_value_opt(&v)?, c.clone()) {
+            (Some(Value::Functor(name1, args1)), Value::Functor(name2, args2)) => {
+                if name1 != name2 {
+                    return Err::err_res(format!("Cannot unify {} and {}: functor names {} and {} don't match", v, c, name1, name2));
+                }
+
+                for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                    self.unify_items(arg1.clone(), arg2.clone())?;
+                }
+
+                return Ok(());
+            }
+
+            _ => {}
+        }
+
         if self.is_disunified_value(&v, &c)? {
             return Err::err_res(format!("Could not unify '{}' and '{}'", v, c));
         }
 
         let unified = self.access_unified(&v);
-
         unified.value_unify = Some(c);
 
         return Ok(());
     }
 
-    pub fn unify(&mut self) -> Result<(), Err> {
-        let item1 = self.pop();
-        let item2 = self.pop();
-
-        if item1.is_err() {
-            return item1.map(|_| ());
-        } else if item2.is_err() {
-            return item2.map(|_| ());
-        }
-
-        return match (item1.unwrap(), item2.unwrap()) {
+    fn unify_items(&mut self, item1: StackItem, item2: StackItem) -> Result<(), Err> {
+        return match (item1, item2) {
             (StackItem::Variable(v1), StackItem::Variable(v2)) => self.unify_vars(v1, v2),
             (StackItem::Variable(v1), StackItem::Value(c2)) => self.unify_var_value(v1, c2),
             (StackItem::Value(c1), StackItem::Variable(v2)) => self.unify_var_value(v2, c1),
             (StackItem::Value(c1), StackItem::Value(c2)) => {
-                if c1 == c2 {
-                    Ok(())
-                } else {
-                    Err::err_res(format!("Cannot unify values '{}' and '{}'", c1, c2))
+                match (c1.clone(), c2.clone()) {
+                    (Value::Functor(name1, args1), Value::Functor(name2, args2)) => {
+                        if name1 != name2 {
+                            return Err::err_res(format!("Cannot unify {} and {}: functor names {} and {} don't match", c1, c2, name1, name2));
+                        }
+
+                        for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                            self.unify_items(arg1.clone(), arg2.clone())?;
+                        }
+
+                        return Ok(());
+                    }
+
+                    _ => {
+                        if c1 == c2 {
+                            Ok(())
+                        } else {
+                            Err::err_res(format!("Cannot unify values '{}' and '{}'", c1, c2))
+                        }
+                    }
                 }
             }
         };
+    }
+
+    pub fn unify(&mut self) -> Result<(), Err> {
+        let item1 = self.pop()?;
+        let item2 = self.pop()?;
+
+        return self.unify_items(item1, item2);
     }
 
     fn disunify_with(&mut self, v1: &String, v2: &String) -> Result<(), Err> {
@@ -376,6 +441,22 @@ impl Environment {
             self.ensure_unification_exists(&v1)?;
             self.ensure_unification_exists(&v2)?;
 
+            match (self.var_value_opt(&v1)?, self.var_value_opt(&v2)?) {
+                (Some(Value::Functor(name1, args1)), Some(Value::Functor(name2, args2))) => {
+                    if name1 != name2 {
+                        return Ok(());
+                    }
+
+                    for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                        self.disunify_items(arg1.clone(), arg2.clone())?;
+                    }
+
+                    return Ok(());
+                }
+
+                _ => {}
+            }
+
             self.disunify_with(&v1, &v2)?;
             self.disunify_with(&v2, &v1)?;
         }
@@ -385,6 +466,22 @@ impl Environment {
 
     fn disunify_var_value(&mut self, v: String, c: Value) -> Result<(), Err> {
         self.ensure_unification_exists(&v)?;
+
+        match (self.var_value_opt(&v)?, c.clone()) {
+            (Some(Value::Functor(name1, args1)), Value::Functor(name2, args2)) => {
+                if name1 != name2 {
+                    return Ok(());
+                }
+
+                for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                    self.disunify_items(arg1.clone(), arg2.clone())?;
+                }
+
+                return Ok(());
+            }
+
+            _ => {}
+        }
 
         if self.is_unified_value(&v, &c)? {
             return Err::err_res(format!("Could not unify '{}' and '{}'", v, c));
@@ -396,27 +493,41 @@ impl Environment {
         return Ok(());
     }
 
-    pub fn disunify(&mut self) -> Result<(), Err> {
-        let item1 = self.pop();
-        let item2 = self.pop();
-
-        if item1.is_err() {
-            return item1.map(|_| ());
-        } else if item2.is_err() {
-            return item2.map(|_| ());
-        }
-
-        return match (item1.unwrap(), item2.unwrap()) {
+    pub fn disunify_items(&mut self, item1: StackItem, item2: StackItem) -> Result<(), Err> {
+        return match (item1, item2) {
             (StackItem::Variable(v1), StackItem::Variable(v2)) => self.disunify_vars(v1, v2),
             (StackItem::Variable(v1), StackItem::Value(c2)) => self.disunify_var_value(v1, c2),
             (StackItem::Value(c1), StackItem::Variable(v2)) => self.disunify_var_value(v2, c1),
             (StackItem::Value(c1), StackItem::Value(c2)) => {
-                if c1 != c2 {
-                    Ok(())
-                } else {
-                    Err::err_res(format!("Cannot disunify values '{}' and '{}'", c1, c2))
+                match (c1.clone(), c2.clone()) {
+                    (Value::Functor(name1, args1), Value::Functor(name2, args2)) => {
+                        if name1 != name2 {
+                            return Ok(());
+                        }
+
+                        for (arg1, arg2) in args1.iter().zip(args2.iter()) {
+                            self.disunify_items(arg1.clone(), arg2.clone())?;
+                        }
+
+                        return Ok(());
+                    }
+
+                    _ => {
+                        if c1 != c2 {
+                            Ok(())
+                        } else {
+                            Err::err_res(format!("Cannot disunify values '{}' and '{}'", c1, c2))
+                        }
+                    }
                 }
             }
         };
+    }
+
+    pub fn disunify(&mut self) -> Result<(), Err> {
+        let item1 = self.pop()?;
+        let item2 = self.pop()?;
+
+        return self.disunify_items(item1, item2);
     }
 }

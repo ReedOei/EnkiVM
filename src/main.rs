@@ -5,6 +5,7 @@ mod unification;
 mod err;
 mod enkienv;
 
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -20,15 +21,16 @@ pub enum Instr {
     Int(BigInt),
     Var(String),
     Str(String),
-    Goto(usize),
-    GotoChoice(usize),
+    Goto,
+    GotoChoice,
     Unify,
     Dup,
     Disunify,
     Pop,
     NameOf,
     Project,
-    Functor(usize)
+    Functor,
+    Swap
 }
 
 fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
@@ -51,14 +53,25 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
             Instr::Dup     => env.dup(),
             Instr::Project => env.project(),
             Instr::NameOf  => env.nameof(),
-            Instr::Functor(len) => env.functor(len),
-            Instr::Goto(idx) => {
-                i = idx;
-                Ok(()) // TODO: Should it be an error if i >= instrs.len()?
+            Instr::Functor => env.functor(),
+            Instr::Swap    => env.swap(),
+            Instr::Goto => {
+                match env.popidx() {
+                    Ok(idx) => {
+                        i = idx;
+                        Ok(()) // TODO: Should it be an error if i >= instrs.len()?
+                    }
+                    Err(err) => Err(err)
+                }
             },
-            Instr::GotoChoice(idx) => { // This adds a choicepoint. If we fail, we'll jump to the location indicated by this idx
-                env.choicepoint = Some((idx, Box::new(env.clone())));
-                Ok(())
+            Instr::GotoChoice => { // This adds a choicepoint. If we fail, we'll jump to the location indicated by idx at the top of the stack
+                match env.popidx() {
+                    Ok(idx) => {
+                        env.choicepoint = Some((idx, Box::new(env.clone())));
+                        Ok(())
+                    }
+                    Err(err) => Err(err)
+                }
             }
         };
 
@@ -96,6 +109,10 @@ fn load_instrs(filename: String) -> Vec<Instr> {
 
     let mut instrs = Vec::new();
 
+    let mut locations = HashMap::new();
+
+    let mut deferred_jumps = Vec::new();
+
     for line in reader.lines() {
         let line_str = line.unwrap();
         let split: Vec<&str> = line_str.split(" ").collect();
@@ -108,11 +125,11 @@ fn load_instrs(filename: String) -> Vec<Instr> {
         } else if opcode == "str" {
             instrs.push(Instr::Str(split[1].to_string()));
         } else if opcode == "goto" {
-            instrs.push(Instr::Goto(split[1].parse::<usize>().unwrap()));
+            instrs.push(Instr::Goto);
         } else if opcode == "gotochoice" {
-            instrs.push(Instr::GotoChoice(split[1].parse::<usize>().unwrap()));
+            instrs.push(Instr::GotoChoice);
         } else if opcode == "functor" {
-            instrs.push(Instr::Functor(split[1].parse::<usize>().unwrap()));
+            instrs.push(Instr::Functor);
         } else if opcode == "unify" {
             instrs.push(Instr::Unify);
         } else if opcode == "pop" {
@@ -125,6 +142,28 @@ fn load_instrs(filename: String) -> Vec<Instr> {
             instrs.push(Instr::Project);
         } else if opcode == "nameof" {
             instrs.push(Instr::NameOf);
+        } else if opcode == "label" {
+            locations.insert(split[1].to_string(), instrs.len() + deferred_jumps.len() * 2);
+        } else if opcode == "jump" {
+            match locations.get(&split[1].to_string()) {
+                Some(idx) => {
+                    instrs.push(Instr::Int(BigInt::from(*idx)));
+                    instrs.push(Instr::Goto);
+                },
+                None => {
+                    deferred_jumps.push((instrs.len() + deferred_jumps.len() * 2, split[1].to_string()));
+                }
+            }
+        }
+    }
+
+    for (insert_pos, label_name) in deferred_jumps {
+        match locations.get(&label_name) {
+            Some(idx) => {
+                instrs.insert(insert_pos, Instr::Goto);
+                instrs.insert(insert_pos, Instr::Int(BigInt::from(*idx)));
+            }
+            None => println!("Unknown label: {}", label_name)
         }
     }
 

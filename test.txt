@@ -1,10 +1,35 @@
+int 0
+str empty
+functor
+
 var x
+int 2
+str cons
+functor
+
+var a
+int 2
+str cons
+functor
+
 var y
+
 unify
+
+int 0
+str empty
+functor
+
 var z
+int 2
+str cons
+functor
+
+var b
+int 2
+str cons
+functor
+
 var y
-disunify
-str testing
-var x
-var z
-functor 2
+
+unify
