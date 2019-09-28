@@ -1,3 +1,14 @@
+# This is a simple example of using a predicate.
+# It roughly corresponds to the following Prolog program:
+# main :-
+#   Name = 'meg',
+#   age(Name, Age),
+#   println(Name),
+#   println(Age).
+#
+# age('reed', 20).
+# age('meg', 21).
+
 position main
 goto
 
@@ -24,7 +35,8 @@ goto
 :age_fact_2
 pop
 pop
-goto
+pop
+fail
 
 :main
 

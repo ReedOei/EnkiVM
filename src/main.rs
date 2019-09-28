@@ -1,3 +1,4 @@
+extern crate clap;
 extern crate num_bigint;
 
 mod stackitem;
@@ -6,9 +7,10 @@ mod err;
 mod enkienv;
 
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+
+use clap::{Arg, App};
 
 use num_bigint::BigInt;
 
@@ -22,6 +24,7 @@ pub enum Instr {
     Var(String),
     Str(String),
     Goto,
+    Fail,
     Print,
     Fresh,
     GotoChoice,
@@ -35,7 +38,7 @@ pub enum Instr {
     Swap
 }
 
-fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
+fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
     let mut env = Environment::new();
 
     let mut i = 0;
@@ -52,6 +55,7 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
                 env.fresh_counter += 1;
                 env.push(StackItem::Variable(fresh_var_name))
             },
+            Instr::Fail => Err::err_res("fail".to_string()),
             Instr::Print => env.print(),
             Instr::Int(i) => env.push(StackItem::Value(Value::IntValue(i))),
             Instr::Str(s) => env.push(StackItem::Value(Value::StringValue(s))),
@@ -100,13 +104,16 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
         }
     }
 
-    println!("Stack at end of program:");
-    println!("{:?}", env.data);
-    println!();
+    if debug {
+        println!("");
+        println!("Stack at end of program:");
+        println!("{:?}", env.data);
+        println!();
 
-    println!("Unification state at end of program:");
-    println!("{:?}", env.unified);
-    println!();
+        println!("Unification state at end of program:");
+        println!("{:?}", env.unified);
+        println!();
+    }
 
     return Ok(());
 }
@@ -174,6 +181,8 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             // Ignore comments
         } else if opcode == "here" {
             instrs.push(Instr::Int(BigInt::from(instrs.len())));
+        } else if opcode == "fail" {
+            instrs.push(Instr::Fail);
         } else {
             println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
             error = true;
@@ -201,24 +210,42 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let matches = App::new("EnkiVM")
+        .version("0.1.0")
+        .author("Reed Oei <reedoei2@illinois.edu>")
+        .about("A VM for logic languages")
+        .arg(Arg::with_name("debug")
+                .long("debug")
+                .help("Whether to print out additional debug information before/after execution"))
+        .arg(Arg::with_name("file")
+                .index(1)
+                .help("The file containing code to execute"))
+        .get_matches();
 
-    match load_instrs(args[1].clone()) {
-        None => {
-            println!("Exited due to parsing errors.");
-        }
+    let debug = matches.is_present("debug");
 
-        Some(instrs) => {
-            println!("Parsed program:");
-            println!("{:?}", instrs);
-            println!();
+    match matches.value_of("file") {
+        Some(filepath) =>
+            match load_instrs(filepath.to_string()) {
+                None => {
+                    println!("Exited due to parsing errors.");
+                }
 
-            match execute(instrs) {
-                Ok(_) => {},
-                Err(err) => {
-                    println!("{}", err.msg_clone());
+                Some(instrs) => {
+                    if debug {
+                        println!("Parsed program:");
+                        println!("{:?}", instrs);
+                        println!();
+                    }
+
+                    match execute(instrs, debug) {
+                        Ok(_) => {},
+                        Err(err) => {
+                            println!("{}", err.msg_clone());
+                        }
+                    }
                 }
             }
-        }
+        None => {}
     }
 }
