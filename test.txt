@@ -1,6 +1,11 @@
-push 1
 push x
 push y
 unify
-dup
-
+push z
+push y
+disunify
+gotochoice 9
+push x
+push y
+disunify
+push 1

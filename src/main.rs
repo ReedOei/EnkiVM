@@ -34,20 +34,13 @@ pub struct Err {
 }
 
 #[derive(Clone, Debug)]
-pub enum Op {
-    Push(StackItem),
-    Goto(usize),
-    GotoChoice(usize),
-    Unify,
-    Dup,
-    Pop
-}
-
-#[derive(Clone, Debug)]
 pub struct Unification {
     var_unify: HashSet<String>,
     var_disunify: HashSet<String>, // The variable that this variable is NOT unifiable with
-    const_unify: Option<Const>
+
+    // We can only be unified with at most one constant, but we can be disunified with as many as we want
+    const_unify: Option<Const>,
+    const_disunify: Vec<Const>
 }
 
 impl Unification {
@@ -55,8 +48,36 @@ impl Unification {
         Unification {
             var_unify: HashSet::new(),
             var_disunify: HashSet::new(),
-            const_unify: None
+            const_unify: None,
+            const_disunify: Vec::new()
         }
+    }
+
+    fn do_disunify(&mut self, other: &String) -> bool {
+        if self.var_unify.contains(other) {
+            return false;
+        } else {
+            self.var_disunify.insert(other.to_string());
+            return true;
+        }
+    }
+
+    fn do_disunify_const(&mut self, c: &Const) -> bool {
+        return match &self.const_unify {
+            Some(cur_c) => {
+                if cur_c == c {
+                    false
+                } else {
+                    self.const_disunify.push(c.clone());
+                    true
+                }
+            },
+
+            None => {
+                self.const_disunify.push(c.clone()); // TODO: Can probably simplify this by having constant tables and such
+                true
+            }
+        };
     }
 
     fn do_unify(&mut self, other: &String) -> bool {
@@ -175,11 +196,77 @@ impl Environment {
             }
         };
     }
+
+    fn disunify_vars(&mut self, v1: String, v2: String) -> Result<(), Err> {
+        if v1 != v2 {
+            let unified1 = self.access_unified(&v1);
+
+            if !unified1.do_disunify(&v2) {
+                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v1, v2) });
+            }
+
+            let unified2 = self.access_unified(&v2);
+            if !unified2.do_disunify(&v1) {
+                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v1, v2) });
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn disunify_var_const(&mut self, v: String, c: Const) -> Result<(), Err> {
+        let unified = self.access_unified(&v);
+
+        if !unified.do_disunify_const(&c) {
+            return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v, c) });
+        }
+
+        let vars = unified.var_unify.clone();
+        for var in vars {
+            let var_unification = self.access_unified(&var);
+
+            if !var_unification.do_disunify_const(&c) {
+                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v, c) });
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn disunify(&mut self) -> Result<(), Err> {
+        let item1 = self.pop();
+        let item2 = self.pop();
+
+        if item1.is_err() {
+            return item1.map(|_| ());
+        } else if item2.is_err() {
+            return item2.map(|_| ());
+        }
+
+        return match (item1.unwrap(), item2.unwrap()) {
+            (StackItem::Variable(v1), StackItem::Variable(v2)) => self.disunify_vars(v1, v2),
+            (StackItem::Variable(v1), StackItem::ConstItem(c2)) => self.disunify_var_const(v1, c2),
+            (StackItem::ConstItem(c1), StackItem::Variable(v2)) => self.disunify_var_const(v2, c1),
+            (StackItem::ConstItem(c1), StackItem::ConstItem(c2)) => {
+                if c1 != c2 {
+                    Ok(())
+                } else {
+                    Err(Err { msg: format!("Cannot disunify constants '{}' and '{}'", c1, c2) })
+                }
+            }
+        };
+    }
 }
 
 #[derive(Clone, Debug)]
-struct Instr {
-    op: Op
+pub enum Instr {
+    Push(StackItem),
+    Goto(usize),
+    GotoChoice(usize),
+    Unify,
+    Dup,
+    Disunify,
+    Pop
 }
 
 fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
@@ -190,11 +277,12 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
     loop {
         let instr = instrs[i].clone();
 
-        let result = match instr.op {
-            Op::Push(v) => env.push(v),
-            Op::Unify   => env.unify(),
-            Op::Pop     => env.pop().map(|_x| ()), // Drop the returned item because we don't need it here
-            Op::Dup     => {
+        let result = match instr {
+            Instr::Push(v) => env.push(v),
+            Instr::Unify   => env.unify(),
+            Instr::Disunify => env.disunify(),
+            Instr::Pop     => env.pop().map(|_x| ()), // Drop the returned item because we don't need it here
+            Instr::Dup     => {
                 match env.pop() {
                     Ok(item) => {
                         env.push(item.clone()).unwrap();
@@ -204,11 +292,11 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
                     Err(err) => Err(err)
                 }
             },
-            Op::Goto(idx) => {
+            Instr::Goto(idx) => {
                 i = idx;
                 Ok(()) // TODO: Should it be an error if i >= instrs.len()?
             },
-            Op::GotoChoice(idx) => { // This adds a choicepoint. If we fail, we'll jump to the location indicated by this idx
+            Instr::GotoChoice(idx) => { // This adds a choicepoint. If we fail, we'll jump to the location indicated by this idx
                 env.choicepoint = Some((idx, Box::new(env.clone())));
                 Ok(())
             }
@@ -274,29 +362,19 @@ fn load_instrs(filename: String) -> Vec<Instr> {
         let opcode = split[0].to_string();
 
         if opcode == "push" {
-            instrs.push(Instr {
-                op: Op::Push(parse_stackitem(split[1]))
-            });
+            instrs.push(Instr::Push(parse_stackitem(split[1])));
         } else if opcode == "goto" {
-            instrs.push(Instr {
-                op: Op::Goto(split[1].parse::<usize>().unwrap())
-            });
+            instrs.push(Instr::Goto(split[1].parse::<usize>().unwrap()));
         } else if opcode == "gotochoice" {
-            instrs.push(Instr {
-                op: Op::GotoChoice(split[1].parse::<usize>().unwrap())
-            });
+            instrs.push(Instr::GotoChoice(split[1].parse::<usize>().unwrap()));
         } else if opcode == "unify" {
-            instrs.push(Instr {
-                op: Op::Unify
-            });
+            instrs.push(Instr::Unify);
         } else if opcode == "pop" {
-            instrs.push(Instr {
-                op: Op::Pop
-            });
+            instrs.push(Instr::Pop);
         } else if opcode == "dup" {
-            instrs.push(Instr {
-                op: Op::Dup
-            });
+            instrs.push(Instr::Dup);
+        } else if opcode == "disunify" {
+            instrs.push(Instr::Disunify);
         }
     }
 
@@ -318,4 +396,3 @@ fn main() {
         }
     }
 }
-
