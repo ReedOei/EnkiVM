@@ -45,7 +45,9 @@ pub enum Instr {
     Lt,
     Lte,
     Gt,
-    Gte
+    Gte,
+    Rot,
+    Over
 }
 
 fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
@@ -86,6 +88,8 @@ fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
             Instr::Gt => env.gt(),
             Instr::Lte => env.lte(),
             Instr::Gte => env.gte(),
+            Instr::Rot => env.rot(),
+            Instr::Over => env.over(),
             Instr::Goto => {
                 match env.popidx() {
                     Ok(idx) => {
@@ -220,6 +224,10 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             instrs.push(Instr::Lte);
         } else if opcode == "gte" {
             instrs.push(Instr::Gte);
+        } else if opcode == "rot" {
+            instrs.push(Instr::Rot);
+        } else if opcode == "over" {
+            instrs.push(Instr::Over);
         } else {
             println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
             error = true;

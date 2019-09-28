@@ -136,6 +136,29 @@ impl Environment {
         return Ok(());
     }
 
+    pub fn over(&mut self) -> Result<(), Err> {
+        let b = self.pop()?;
+        let a = self.pop()?;
+
+        self.push(a.clone())?;
+        self.push(b)?;
+        self.push(a)?;
+
+        return Ok(());
+    }
+
+    pub fn rot(&mut self) -> Result<(), Err> {
+        let c = self.pop()?;
+        let b = self.pop()?;
+        let a = self.pop()?;
+
+        self.push(c)?;
+        self.push(a)?;
+        self.push(b)?;
+
+        return Ok(());
+    }
+
     pub fn nameof(&mut self) -> Result<(), Err> {
         return match self.pop()? {
             StackItem::Value(Value::Functor(name, _)) => self.push(StackItem::Value(Value::StringValue(name))),
