@@ -4,8 +4,6 @@ unify
 push z
 push y
 disunify
-gotochoice 10
 push x
-push y
-disunify
-push 1
+push z
+unify

@@ -5,6 +5,7 @@ mod unification;
 
 use std::collections::VecDeque;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -62,38 +63,186 @@ impl Environment {
         return self.unified.get_mut(v).unwrap(); // We can safely unwrap here, since we know we put it in above
     }
 
+    fn get_unified(&self, v: &String) -> Result<&Unification, Err> {
+        return self.unified.get(v).ok_or(Err {msg: format!("Unification doesn't exist for {}", v) });
+    }
+
+    fn is_disunified(&self, v1: &String, v2: &String) -> Result<bool, Err> {
+        let mut to_check = VecDeque::new();
+        to_check.push_front(v2);
+        let mut checked = HashSet::new();
+
+        loop {
+            match to_check.pop_front() {
+                Some(var_name) => {
+                    if checked.contains(var_name) {
+                        continue;
+                    }
+                    checked.insert(var_name);
+
+                    let unification = self.get_unified(var_name)?;
+
+                    if unification.var_disunify.contains(v1) {
+                        return Ok(true);
+                    }
+
+                    to_check.extend(&unification.var_unify);
+                },
+
+                None => break
+            }
+        }
+
+        return Ok(false);
+    }
+
+
+    fn is_disunified_const(&self, v: &String, c: &Const) -> Result<bool, Err> {
+        let mut to_check = VecDeque::new();
+        to_check.extend(&self.get_unified(v)?.var_unify);
+        let mut checked = HashSet::new();
+
+        loop {
+            match to_check.pop_front() {
+                Some(var_name) => {
+                    if checked.contains(var_name) {
+                        continue;
+                    }
+                    checked.insert(var_name);
+
+                    let unification = self.get_unified(var_name)?;
+
+                    for check_const in &unification.const_disunify {
+                        if check_const == c {
+                            return Ok(true);
+                        }
+                    }
+
+                    match &unification.const_unify {
+                        Some(cur_c) => {
+                            return Ok(cur_c != c);
+                        },
+                        None => {}
+                    }
+
+                    to_check.extend(&unification.var_unify);
+                },
+
+                None => break
+            }
+        }
+
+        return Ok(false);
+    }
+
+    fn is_unified(&self, v1: &String, v2: &String) -> Result<bool, Err> {
+        let mut to_check = VecDeque::new();
+        to_check.push_front(v2);
+        let mut checked = HashSet::new();
+
+        loop {
+            match to_check.pop_front() {
+                Some(var_name) => {
+                    if checked.contains(var_name) {
+                        continue;
+                    }
+                    checked.insert(var_name);
+
+                    let unification = self.get_unified(var_name)?;
+
+                    if unification.var_unify.contains(v1) {
+                        return Ok(true);
+                    }
+
+                    to_check.extend(&unification.var_unify);
+                },
+
+                None => break
+            }
+        }
+
+        return Ok(false);
+    }
+
+    fn is_unified_const(&self, v: &String, c: &Const) -> Result<bool, Err> {
+        let mut to_check = VecDeque::new();
+        to_check.extend(&self.get_unified(v)?.var_unify);
+        let mut checked = HashSet::new();
+
+        loop {
+            match to_check.pop_front() {
+                Some(var_name) => {
+                    if checked.contains(var_name) {
+                        continue;
+                    }
+                    checked.insert(var_name);
+                    
+                    let unification = self.get_unified(var_name)?;
+
+                    for check_const in &unification.const_disunify {
+                        if check_const == c {
+                            return Ok(false);
+                        }
+                    }
+
+                    match &unification.const_unify {
+                        Some(cur_c) => {
+                            return Ok(cur_c == c);
+                        },
+                        None => {}
+                    }
+
+                    to_check.extend(&unification.var_unify);
+                },
+
+                None => break
+            }
+        }
+
+        return Ok(false);
+    }
+
+    fn unify_with(&mut self, v1: &String, v2: &String) -> Result<(), Err> {
+        if self.is_disunified(v1, v2)? {
+            return Err(Err { msg: format!("Could not unify '{}' and '{}'", v1, v2) });
+        }
+
+        let unified = self.access_unified(v1);
+        unified.var_unify.insert(v2.clone());
+
+        return Ok(());
+    }
+
+    fn ensure_unification_exists(&mut self, v: &String) -> Result<(), Err> {
+        if !self.unified.contains_key(v) {
+            self.unified.insert(v.clone(), Unification::new());
+        }
+
+        return Ok(());
+    }
+
     fn unify_vars(&mut self, v1: String, v2: String) -> Result<(), Err> {
         if v1 != v2 {
-            let unified1 = self.access_unified(&v1);
+            self.ensure_unification_exists(&v1)?;
+            self.ensure_unification_exists(&v2)?;
 
-            if !unified1.do_unify(&v2) {
-                return Err(Err { msg: format!("Could not unify '{}' and '{}'", v1, v2) });
-            }
-
-            let unified2 = self.access_unified(&v2);
-            if !unified2.do_unify(&v1) {
-                return Err(Err { msg: format!("Could not unify '{}' and '{}'", v1, v2) });
-            }
+            self.unify_with(&v1, &v2)?;
+            self.unify_with(&v2, &v1)?;
         }
 
         return Ok(());
     }
 
     fn unify_var_const(&mut self, v: String, c: Const) -> Result<(), Err> {
-        let unified = self.access_unified(&v);
+        self.ensure_unification_exists(&v)?;
 
-        if !unified.do_unify_const(&c) {
+        if self.is_disunified_const(&v, &c)? {
             return Err(Err { msg: format!("Could not unify '{}' and '{}'", v, c) });
         }
 
-        let vars = unified.var_unify_clone();
-        for var in vars {
-            let var_unification = self.access_unified(&var);
+        let unified = self.access_unified(&v);
 
-            if !var_unification.do_unify_const(&c) {
-                return Err(Err { msg: format!("Could not unify '{}' and '{}'", v, c) });
-            }
-        }
+        unified.const_unify = Some(c);
 
         return Ok(());
     }
@@ -122,38 +271,38 @@ impl Environment {
         };
     }
 
+    fn disunify_with(&mut self, v1: &String, v2: &String) -> Result<(), Err> {
+        if self.is_unified(v1, v2)? {
+            return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v1, v2) });
+        }
+
+        let unified = self.access_unified(v1);
+        unified.var_disunify.insert(v2.clone());
+
+        return Ok(());
+    }
+
     fn disunify_vars(&mut self, v1: String, v2: String) -> Result<(), Err> {
         if v1 != v2 {
-            let unified1 = self.access_unified(&v1);
+            self.ensure_unification_exists(&v1)?;
+            self.ensure_unification_exists(&v2)?;
 
-            if !unified1.do_disunify(&v2) {
-                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v1, v2) });
-            }
-
-            let unified2 = self.access_unified(&v2);
-            if !unified2.do_disunify(&v1) {
-                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v1, v2) });
-            }
+            self.disunify_with(&v1, &v2)?;
+            self.disunify_with(&v2, &v1)?;
         }
 
         return Ok(());
     }
 
     fn disunify_var_const(&mut self, v: String, c: Const) -> Result<(), Err> {
+        self.ensure_unification_exists(&v)?;
+
+        if self.is_unified_const(&v, &c)? {
+            return Err(Err { msg: format!("Could not unify '{}' and '{}'", v, c) });
+        }
+
         let unified = self.access_unified(&v);
-
-        if !unified.do_disunify_const(&c) {
-            return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v, c) });
-        }
-
-        let vars = unified.var_unify_clone();
-        for var in vars {
-            let var_unification = self.access_unified(&var);
-
-            if !var_unification.do_disunify_const(&c) {
-                return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v, c) });
-            }
-        }
+        unified.const_disunify.push(c);
 
         return Ok(());
     }
