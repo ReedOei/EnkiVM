@@ -66,6 +66,18 @@ impl Environment {
         return Ok(());
     }
 
+    pub fn print_stack(&mut self) -> Result<(), Err> {
+        println!("{:?}", self.data);
+
+        return Ok(());
+    }
+
+    pub fn print_unification(&mut self) -> Result<(), Err> {
+        println!("{:?}", self.unified);
+
+        return Ok(());
+    }
+
     pub fn push(&mut self, new_item: StackItem) -> Result<(), Err> {
         self.data.push_front(new_item);
         return Ok(());

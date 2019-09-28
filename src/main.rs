@@ -47,7 +47,9 @@ pub enum Instr {
     Gt,
     Gte,
     Rot,
-    Over
+    Over,
+    PrintStack,
+    PrintUnification
 }
 
 fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
@@ -90,6 +92,8 @@ fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
             Instr::Gte => env.gte(),
             Instr::Rot => env.rot(),
             Instr::Over => env.over(),
+            Instr::PrintStack => env.print_stack(),
+            Instr::PrintUnification => env.print_unification(),
             Instr::Goto => {
                 match env.popidx() {
                     Ok(idx) => {
@@ -228,6 +232,12 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             instrs.push(Instr::Rot);
         } else if opcode == "over" {
             instrs.push(Instr::Over);
+        } else if opcode == "swap" {
+            instrs.push(Instr::Swap);
+        } else if opcode == "printstack" {
+            instrs.push(Instr::PrintStack);
+        } else if opcode == "printunification" {
+            instrs.push(Instr::PrintUnification);
         } else {
             println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
             error = true;
