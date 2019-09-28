@@ -1,26 +1,18 @@
 extern crate num_bigint;
 
+mod r#const;
+mod unification;
+
 use std::collections::VecDeque;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use num_bigint::BigInt;
 
-#[derive(PartialEq, Clone, Debug)]
-pub enum Const {
-    IntConst(BigInt)
-}
-
-impl std::fmt::Display for Const {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Const::IntConst(i) => write!(f, "{}", i)
-        }
-    }
-}
+use unification::Unification;
+use r#const::Const;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum StackItem {
@@ -31,73 +23,6 @@ pub enum StackItem {
 #[derive(Debug)]
 pub struct Err {
     msg: String
-}
-
-#[derive(Clone, Debug)]
-pub struct Unification {
-    var_unify: HashSet<String>,
-    var_disunify: HashSet<String>, // The variable that this variable is NOT unifiable with
-
-    // We can only be unified with at most one constant, but we can be disunified with as many as we want
-    const_unify: Option<Const>,
-    const_disunify: Vec<Const>
-}
-
-impl Unification {
-    fn new() -> Unification {
-        Unification {
-            var_unify: HashSet::new(),
-            var_disunify: HashSet::new(),
-            const_unify: None,
-            const_disunify: Vec::new()
-        }
-    }
-
-    fn do_disunify(&mut self, other: &String) -> bool {
-        if self.var_unify.contains(other) {
-            return false;
-        } else {
-            self.var_disunify.insert(other.to_string());
-            return true;
-        }
-    }
-
-    fn do_disunify_const(&mut self, c: &Const) -> bool {
-        return match &self.const_unify {
-            Some(cur_c) => {
-                if cur_c == c {
-                    false
-                } else {
-                    self.const_disunify.push(c.clone());
-                    true
-                }
-            },
-
-            None => {
-                self.const_disunify.push(c.clone()); // TODO: Can probably simplify this by having constant tables and such
-                true
-            }
-        };
-    }
-
-    fn do_unify(&mut self, other: &String) -> bool {
-        if self.var_disunify.contains(other) {
-            return false;
-        } else {
-            self.var_unify.insert(other.to_string());
-            return true;
-        }
-    }
-
-    fn do_unify_const(&mut self, c: &Const) -> bool {
-        return match &self.const_unify {
-            Some(cur_c) => cur_c == c,
-            None => {
-                self.const_unify = Some(c.clone());
-                true
-            }
-        };
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -161,7 +86,7 @@ impl Environment {
             return Err(Err { msg: format!("Could not unify '{}' and '{}'", v, c) });
         }
 
-        let vars = unified.var_unify.clone();
+        let vars = unified.var_unify_clone();
         for var in vars {
             let var_unification = self.access_unified(&var);
 
@@ -221,7 +146,7 @@ impl Environment {
             return Err(Err { msg: format!("Could not disunify '{}' and '{}'", v, c) });
         }
 
-        let vars = unified.var_unify.clone();
+        let vars = unified.var_unify_clone();
         for var in vars {
             let var_unification = self.access_unified(&var);
 
@@ -277,6 +202,8 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
     loop {
         let instr = instrs[i].clone();
 
+        i += 1;
+
         let result = match instr {
             Instr::Push(v) => env.push(v),
             Instr::Unify   => env.unify(),
@@ -313,8 +240,6 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
                 None => return result
             }
         }
-
-        i += 1;
 
         if i >= instrs.len() {
             break;

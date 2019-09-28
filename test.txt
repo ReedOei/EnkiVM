@@ -4,7 +4,7 @@ unify
 push z
 push y
 disunify
-gotochoice 9
+gotochoice 10
 push x
 push y
 disunify
