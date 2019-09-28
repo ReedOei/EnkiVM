@@ -13,17 +13,22 @@ use num_bigint::BigInt;
 
 use enkienv::Environment;
 use err::Err;
-use stackitem::{StackItem, Const};
+use stackitem::{StackItem, Value};
 
 #[derive(Clone, Debug)]
 pub enum Instr {
-    Push(StackItem),
+    Int(BigInt),
+    Var(String),
+    Str(String),
     Goto(usize),
     GotoChoice(usize),
     Unify,
     Dup,
     Disunify,
-    Pop
+    Pop,
+    NameOf,
+    Project,
+    Functor(usize)
 }
 
 fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
@@ -37,11 +42,16 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
         i += 1;
 
         let result = match instr {
-            Instr::Push(v) => env.push(v),
+            Instr::Var(var_name) => env.push(StackItem::Variable(var_name)),
+            Instr::Int(i) => env.push(StackItem::Value(Value::IntValue(i))),
+            Instr::Str(s) => env.push(StackItem::Value(Value::StringValue(s))),
             Instr::Unify   => env.unify(),
             Instr::Disunify => env.disunify(),
             Instr::Pop     => env.pop().map(|_x| ()), // Drop the returned item because we don't need it here
             Instr::Dup     => env.dup(),
+            Instr::Project => env.project(),
+            Instr::NameOf  => env.nameof(),
+            Instr::Functor(len) => env.functor(len),
             Instr::Goto(idx) => {
                 i = idx;
                 Ok(()) // TODO: Should it be an error if i >= instrs.len()?
@@ -80,24 +90,6 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
     return Ok(());
 }
 
-fn is_numeric(s: &str) -> bool {
-    for i in s.chars() {
-        if '0' > i || i > '9' {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-fn parse_stackitem(item: &str) -> StackItem {
-    if is_numeric(item) {
-        return StackItem::ConstItem(Const::IntConst(BigInt::parse_bytes(item.as_bytes(), 10).unwrap()));
-    } else {
-        return StackItem::Variable(item.to_string());
-    }
-}
-
 fn load_instrs(filename: String) -> Vec<Instr> {
     let file = File::open(filename).unwrap(); // TODO: Handle this better
     let reader = BufReader::new(file);
@@ -109,12 +101,18 @@ fn load_instrs(filename: String) -> Vec<Instr> {
         let split: Vec<&str> = line_str.split(" ").collect();
         let opcode = split[0].to_string();
 
-        if opcode == "push" {
-            instrs.push(Instr::Push(parse_stackitem(split[1])));
+        if opcode == "var" {
+            instrs.push(Instr::Var(split[1].to_string()));
+        } else if opcode == "int" {
+            instrs.push(Instr::Int(BigInt::parse_bytes(split[1].as_bytes(), 10).unwrap()));
+        } else if opcode == "str" {
+            instrs.push(Instr::Str(split[1].to_string()));
         } else if opcode == "goto" {
             instrs.push(Instr::Goto(split[1].parse::<usize>().unwrap()));
         } else if opcode == "gotochoice" {
             instrs.push(Instr::GotoChoice(split[1].parse::<usize>().unwrap()));
+        } else if opcode == "functor" {
+            instrs.push(Instr::Functor(split[1].parse::<usize>().unwrap()));
         } else if opcode == "unify" {
             instrs.push(Instr::Unify);
         } else if opcode == "pop" {
@@ -123,6 +121,10 @@ fn load_instrs(filename: String) -> Vec<Instr> {
             instrs.push(Instr::Dup);
         } else if opcode == "disunify" {
             instrs.push(Instr::Disunify);
+        } else if opcode == "project" {
+            instrs.push(Instr::Project);
+        } else if opcode == "nameof" {
+            instrs.push(Instr::NameOf);
         }
     }
 

@@ -1,9 +1,10 @@
-push x
-push y
+var x
+var y
 unify
-push z
-push y
+var z
+var y
 disunify
-push x
-push z
-unify
+str testing
+var x
+var z
+functor 2
