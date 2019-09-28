@@ -1,0 +1,38 @@
+position main
+goto
+
+:length
+
+position cons_case
+gotochoice
+
+:empty_case
+str empty
+int 0
+functor
+unify
+int 0
+unify
+goto
+
+:cons_case
+# L Arg
+swap # L Arg
+fresh # L Arg X
+fresh # L Arg X Y
+dup # L Arg X Y Y
+rot # L Arg Y Y X
+swap # L Arg Y X Y
+str cons # L Arg Y X Y cons
+int 2
+functor # L Arg Y cons(X,Y)
+rot # L Y cons(X,Y) Arg
+unify # L Y
+swap # Y L
+position length
+goto
+
+:main
+macro cons(A,B) => {
+
+}
