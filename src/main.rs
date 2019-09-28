@@ -22,6 +22,8 @@ pub enum Instr {
     Var(String),
     Str(String),
     Goto,
+    Print,
+    Fresh,
     GotoChoice,
     Unify,
     Dup,
@@ -45,6 +47,12 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
 
         let result = match instr {
             Instr::Var(var_name) => env.push(StackItem::Variable(var_name)),
+            Instr::Fresh => {
+                let fresh_var_name = format!("T_{}", env.fresh_counter);
+                env.fresh_counter += 1;
+                env.push(StackItem::Variable(fresh_var_name))
+            },
+            Instr::Print => env.print(),
             Instr::Int(i) => env.push(StackItem::Value(Value::IntValue(i))),
             Instr::Str(s) => env.push(StackItem::Value(Value::StringValue(s))),
             Instr::Unify   => env.unify(),
@@ -103,7 +111,7 @@ fn execute(instrs: Vec<Instr>) -> Result<(), Err> {
     return Ok(());
 }
 
-fn load_instrs(filename: String) -> Vec<Instr> {
+fn load_instrs(filename: String) -> Option<Vec<Instr>> {
     let file = File::open(filename).unwrap(); // TODO: Handle this better
     let reader = BufReader::new(file);
 
@@ -111,7 +119,9 @@ fn load_instrs(filename: String) -> Vec<Instr> {
 
     let mut locations = HashMap::new();
 
-    let mut deferred_jumps = Vec::new();
+    let mut positions = Vec::new();
+
+    let mut error = false;
 
     for line in reader.lines() {
         let line_str = line.unwrap();
@@ -142,46 +152,65 @@ fn load_instrs(filename: String) -> Vec<Instr> {
             instrs.push(Instr::Project);
         } else if opcode == "nameof" {
             instrs.push(Instr::NameOf);
-        } else if opcode == "label" {
-            locations.insert(split[1].to_string(), instrs.len() + deferred_jumps.len() * 2);
-        } else if opcode == "jump" {
-            match locations.get(&split[1].to_string()) {
-                Some(idx) => {
-                    instrs.push(Instr::Int(BigInt::from(*idx)));
-                    instrs.push(Instr::Goto);
-                },
-                None => {
-                    deferred_jumps.push((instrs.len() + deferred_jumps.len() * 2, split[1].to_string()));
-                }
-            }
+        } else if opcode.starts_with(":") {
+            let label_name = (&opcode[1..opcode.len()]).to_string();
+            locations.insert(label_name, instrs.len() + positions.len());
+        } else if opcode == "position" {
+            positions.push((instrs.len() + positions.len(), split[1].to_string()));
+        } else if opcode == "fresh" {
+            instrs.push(Instr::Fresh)
+        } else if opcode == "print" {
+            instrs.push(Instr::Print)
+        } else if opcode == "" {
+            // Ignore blank lines
+        } else if opcode == "#" {
+            // Ignore comments
+        } else if opcode == "here" {
+            instrs.push(Instr::Int(BigInt::from(instrs.len())));
+        } else {
+            println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
+            error = true;
         }
     }
 
-    for (insert_pos, label_name) in deferred_jumps {
+    for (insert_pos, label_name) in positions {
         match locations.get(&label_name) {
             Some(idx) => {
-                instrs.insert(insert_pos, Instr::Goto);
                 instrs.insert(insert_pos, Instr::Int(BigInt::from(*idx)));
             }
-            None => println!("Unknown label: {}", label_name)
+            None => {
+                println!("Unknown label: {}", label_name);
+                error = true;
+            }
         }
     }
 
-    return instrs;
+    if error {
+        return None;
+    } else {
+        return Some(instrs);
+    }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let instrs = load_instrs(args[1].clone());
 
-    println!("Parsed program:");
-    println!("{:?}", instrs);
-    println!();
+    match load_instrs(args[1].clone()) {
+        None => {
+            println!("Exited due to parsing errors.");
+        }
 
-    match execute(instrs) {
-        Ok(_) => {},
-        Err(err) => {
-            println!("{}", err.msg_clone());
+        Some(instrs) => {
+            println!("Parsed program:");
+            println!("{:?}", instrs);
+            println!();
+
+            match execute(instrs) {
+                Ok(_) => {},
+                Err(err) => {
+                    println!("{}", err.msg_clone());
+                }
+            }
         }
     }
 }

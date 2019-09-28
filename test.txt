@@ -1,35 +1,36 @@
-int 0
-str empty
-functor
+position main
+goto
 
-var x
-int 2
-str cons
-functor
+:age
 
-var a
-int 2
-str cons
-functor
-
-var y
-
+:age_fact_0
+position age_fact_1
+gotochoice
+str reed
 unify
-
-int 0
-str empty
-functor
-
-var z
-int 2
-str cons
-functor
-
-var b
-int 2
-str cons
-functor
-
-var y
-
+int 20
 unify
+goto
+
+:age_fact_1
+position age_fact_2
+gotochoice
+str meg
+unify
+int 21
+unify
+goto
+
+:age_fact_2
+pop
+goto
+
+:main
+
+position aftercall
+var age
+var name
+position age
+goto
+
+:aftercall

@@ -49,6 +49,12 @@ impl Environment {
         return Ok(());
     }
 
+    pub fn print(&mut self) -> Result<(), Err> {
+        print!("{}", self.pop()?);
+
+        return Ok(());
+    }
+
     pub fn push(&mut self, new_item: StackItem) -> Result<(), Err> {
         self.data.push_front(new_item);
         return Ok(());
