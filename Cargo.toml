@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 num-bigint = "0.2"
 clap = "2.33.0"
+num-traits = "0.2"

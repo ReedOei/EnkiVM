@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use num_bigint::Sign;
+use num_bigint::BigInt;
+use num_traits::pow::Pow;
 
 use crate::err::Err;
 use crate::stackitem::{StackItem, Value};
@@ -141,8 +143,8 @@ impl Environment {
         }
     }
 
-    pub fn popidx(&mut self) -> Result<usize, Err> {
-        let index = match self.pop()? {
+    pub fn popint(&mut self) -> Result<BigInt, Err> {
+        let i = match self.pop()? {
             StackItem::Value(Value::IntValue(idx)) => idx,
             StackItem::Variable(var_name) => {
                 match self.var_value(&var_name)? {
@@ -153,6 +155,12 @@ impl Environment {
             _ => return Err::err_res("Top stack item was not an integer".to_string())
         };
 
+        return Ok(i);
+    }
+
+    pub fn popidx(&mut self) -> Result<usize, Err> {
+        let index = self.popint()?;
+
         let (sign, le_bytes) = index.to_bytes_le();
 
         if sign == Sign::Minus {
@@ -160,6 +168,100 @@ impl Environment {
         }
 
         return Ok(le_bytes_to_usize(le_bytes)?);
+    }
+
+    pub fn add(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        self.push(StackItem::Value(Value::IntValue(a + b)))?;
+
+        return Ok(());
+    }
+
+    pub fn sub(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        self.push(StackItem::Value(Value::IntValue(a - b)))?;
+
+        return Ok(());
+    }
+
+    pub fn div(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        self.push(StackItem::Value(Value::IntValue(a / b)))?;
+
+        return Ok(());
+    }
+
+    pub fn mul(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        self.push(StackItem::Value(Value::IntValue(a * b)))?;
+
+        return Ok(());
+    }
+
+    pub fn lt(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        if a < b {
+            return Ok(());
+        } else {
+            return Err::err_res(format!("{} not less than {}", a, b));
+        }
+    }
+
+    pub fn gt(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        if a > b {
+            return Ok(());
+        } else {
+            return Err::err_res(format!("{} not less than {}", a, b));
+        }
+    }
+
+    pub fn lte(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        if a <= b {
+            return Ok(());
+        } else {
+            return Err::err_res(format!("{} not less than {}", a, b));
+        }
+    }
+
+    pub fn gte(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let b = self.popint()?;
+
+        if a >= b {
+            return Ok(());
+        } else {
+            return Err::err_res(format!("{} not less than {}", a, b));
+        }
+    }
+
+    pub fn pow(&mut self) -> Result<(), Err> {
+        let a = self.popint()?;
+        let bint = self.popint()?;
+
+        return match bint.to_biguint() {
+            Some(b) => {
+                self.push(StackItem::Value(Value::IntValue(a.pow(b))))?;
+
+                Ok(())
+            }
+            None => Err::err_res(format!("Cannot raise {} to the power of {} because {} is negative", a, bint, bint))
+        };
     }
 
     pub fn project(&mut self) -> Result<(), Err> {

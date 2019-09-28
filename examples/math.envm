@@ -1,0 +1,45 @@
+int 10
+int 20
+int 30
+add
+sub
+print
+str \n
+print
+
+int 200
+int 2
+pow
+print
+str \n
+print
+
+position comp_fail
+gotochoice
+int 2
+int 5
+lt
+
+str Failure\n
+print
+
+:comp_fail
+str Success\n
+print
+
+position comp_fail2
+gotochoice
+int 2
+int 5
+gt
+
+str Success\n
+print
+position after_goto
+goto
+
+:comp_fail2
+str Failure\n
+print
+
+:after_goto

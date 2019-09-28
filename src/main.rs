@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate num_bigint;
+extern crate num_traits;
 
 mod stackitem;
 mod unification;
@@ -35,7 +36,16 @@ pub enum Instr {
     NameOf,
     Project,
     Functor,
-    Swap
+    Swap,
+    Add,
+    Sub,
+    Div,
+    Mul,
+    Pow,
+    Lt,
+    Lte,
+    Gt,
+    Gte
 }
 
 fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
@@ -67,6 +77,15 @@ fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
             Instr::NameOf  => env.nameof(),
             Instr::Functor => env.functor(),
             Instr::Swap    => env.swap(),
+            Instr::Add  => env.add(),
+            Instr::Sub => env.sub(),
+            Instr::Mul => env.mul(),
+            Instr::Div => env.div(),
+            Instr::Pow => env.pow(),
+            Instr::Lt => env.lt(),
+            Instr::Gt => env.gt(),
+            Instr::Lte => env.lte(),
+            Instr::Gte => env.gte(),
             Instr::Goto => {
                 match env.popidx() {
                     Ok(idx) => {
@@ -183,6 +202,24 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             instrs.push(Instr::Int(BigInt::from(instrs.len())));
         } else if opcode == "fail" {
             instrs.push(Instr::Fail);
+        } else if opcode == "add" {
+            instrs.push(Instr::Add);
+        } else if opcode == "sub" {
+            instrs.push(Instr::Sub);
+        } else if opcode == "mul" {
+            instrs.push(Instr::Mul);
+        } else if opcode == "div" {
+            instrs.push(Instr::Div);
+        } else if opcode == "pow" {
+            instrs.push(Instr::Pow);
+        } else if opcode == "lt" {
+            instrs.push(Instr::Lt);
+        } else if opcode == "gt" {
+            instrs.push(Instr::Gt);
+        } else if opcode == "lte" {
+            instrs.push(Instr::Lte);
+        } else if opcode == "gte" {
+            instrs.push(Instr::Gte);
         } else {
             println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
             error = true;
