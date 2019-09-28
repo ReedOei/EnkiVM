@@ -214,7 +214,7 @@ impl Environment {
 
     fn is_disunified_value(&self, v: &String, c: &Value) -> Result<bool, Err> {
         let mut to_check = VecDeque::new();
-        to_check.extend(&self.get_unified(v)?.var_unify);
+        to_check.push_front(v);
         let mut checked = HashSet::new();
 
         loop {
@@ -281,7 +281,7 @@ impl Environment {
 
     fn is_unified_value(&self, v: &String, c: &Value) -> Result<bool, Err> {
         let mut to_check = VecDeque::new();
-        to_check.extend(&self.get_unified(v)?.var_unify);
+        to_check.push_front(v);
         let mut checked = HashSet::new();
 
         loop {

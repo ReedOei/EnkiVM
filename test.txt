@@ -27,6 +27,10 @@ goto
 
 :main
 
+var name
+str meg
+unify
+
 position aftercall
 var age
 var name
