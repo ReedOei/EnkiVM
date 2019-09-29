@@ -145,10 +145,17 @@ fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
     return Ok(());
 }
 
-fn process_str_const(str: &String) -> String {
-    return str.replace("\\n", "\n")
-              .replace("\\t", "\t")
-              .replace("\\r", "\r");
+fn process_str_const(s: &String) -> Option<String> {
+    let temp_str =
+        s.replace("\\n", "\n")
+           .replace("\\t", "\t")
+           .replace("\\r", "\r")
+           .replace("\\\"", "\"");
+
+    let start_pos = temp_str.find("\"")?;
+    let end_pos = temp_str.rfind("\"")?;
+
+    return Some((&temp_str[start_pos + 1..end_pos]).to_string());
 }
 
 fn load_instrs(filename: String) -> Option<Vec<Instr>> {
@@ -173,8 +180,18 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
         } else if opcode == "int" {
             instrs.push(Instr::Int(BigInt::parse_bytes(split[1].as_bytes(), 10).unwrap()));
         } else if opcode == "str" {
-            let str_const = process_str_const(&(line_str["str".len() + 1..line_str.len()]).to_string());
-            instrs.push(Instr::Str(str_const));
+            let str_const_opt = process_str_const(&(line_str["str".len() + 1..line_str.len()]).to_string());
+
+            match str_const_opt {
+                Some(str_const) => {
+                    instrs.push(Instr::Str(str_const));
+                }
+
+                None => {
+                    error = true;
+                    println!("Could not parse string constant in: '{}'", line_str);
+                }
+            }
         } else if opcode == "goto" {
             instrs.push(Instr::Goto);
         } else if opcode == "gotochoice" {

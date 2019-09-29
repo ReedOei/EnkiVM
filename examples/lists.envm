@@ -8,7 +8,7 @@ gotochoice
 
 :empty_case # L Arg
 int 0
-str empty
+str "empty"
 functor
 unify
 int 0
@@ -22,7 +22,7 @@ dup # L Arg X Y Y
 rot # L Arg Y X Y
 swap
 int 2
-str cons
+str "cons"
 functor # L Arg Y cons(X,Y)
 rot # L cons(X,Y) Arg Y
 rot # L Y cons(X,Y) Arg
@@ -41,26 +41,63 @@ add # L (NewL + 1)
 unify # ReturnPos
 goto # Return
 
+:printlist
+
+position cons_case_print
+gotochoice
+
+:empty_case_print
+int 0
+str "empty"
+functor
+unify
+str "\n"
+print
+goto
+
+:cons_case_print # L
+fresh # L T
+dup # L T T
+rot # T L T
+fresh # T L T H
+dup # T L T H H
+rot # T L H T H
+int 2
+str "cons"
+functor # T L H cons(H,T)
+rot # T cons(H,T) L H
+rot # T H cons(H,T) L
+unify # T H
+print
+str ","
+print
+position after_call_print
+swap
+position printlist
+goto
+:after_call_print
+goto
+
 :main
 # Build the list: [90,28,14,12]
 int 0
-str empty
+str "empty"
 functor
 int 12
 int 2
-str cons
+str "cons"
 functor
 int 14
 int 2
-str cons
+str "cons"
 functor
 int 28
 int 2
-str cons
+str "cons"
 functor
 int 90
 int 2
-str cons
+str "cons"
 functor # [90,28,14,12]
 position aftercall # [90,28,14,12] :aftercall
 swap # :aftercall [90,28,14,12]
@@ -71,4 +108,19 @@ goto
 :aftercall
 var L
 print
+str "\n"
+print
+
+position aftercall2
+int 10
+var List10
+position length
+goto
+:aftercall2
+
+position aftercall3
+var List10
+position printlist
+goto
+:aftercall3
 
