@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-use num_bigint::Sign;
 use num_bigint::BigInt;
 use num_traits::pow::Pow;
+use num_traits::ToPrimitive;
 
 use crate::err::Err;
 use crate::stackitem::{StackItem, Value};
@@ -18,19 +18,6 @@ pub struct Environment {
     pub fresh_counter: usize
 }
 
-fn le_bytes_to_usize(le_bytes: Vec<u8>) -> Result<usize, Err> {
-    if le_bytes.len() > 8 {
-        return Err::err_res(format!("Index {:?} is too large!", le_bytes));
-    }
-
-    let mut new_arr = [0; 8];
-    for i in 0..le_bytes.len() {
-        new_arr[i] = le_bytes[i];
-    }
-
-    return Ok(usize::from_le_bytes(new_arr));
-}
-
 impl Environment {
     pub fn new() -> Environment {
         Environment {
@@ -39,6 +26,16 @@ impl Environment {
             choicepoint: None,
             fresh_counter: 0
         }
+    }
+
+    pub fn print_stack(&mut self) -> Result<(), Err> {
+        println!("{:?}", self.data);
+        return Ok(());
+    }
+
+    pub fn print_unification(&mut self) -> Result<(), Err> {
+        println!("{:?}", self.unified);
+        return Ok(());
     }
 
     pub fn swap(&mut self) -> Result<(), Err> {
@@ -62,18 +59,6 @@ impl Environment {
 
             StackItem::Value(val) => print!("{}", val)
         }
-
-        return Ok(());
-    }
-
-    pub fn print_stack(&mut self) -> Result<(), Err> {
-        println!("{:?}", self.data);
-
-        return Ok(());
-    }
-
-    pub fn print_unification(&mut self) -> Result<(), Err> {
-        println!("{:?}", self.unified);
 
         return Ok(());
     }
@@ -194,15 +179,7 @@ impl Environment {
     }
 
     pub fn popidx(&mut self) -> Result<usize, Err> {
-        let index = self.popint()?;
-
-        let (sign, le_bytes) = index.to_bytes_le();
-
-        if sign == Sign::Minus {
-            return Err::err_res("Functor indices must be nonnegative integers!".to_string());
-        }
-
-        return Ok(le_bytes_to_usize(le_bytes)?);
+        return self.popint()?.to_usize().ok_or(Err::new("".to_string()));
     }
 
     pub fn add(&mut self) -> Result<(), Err> {
