@@ -1,0 +1,29 @@
+macro println x
+var x
+print
+str "\n"
+print
+endmacro
+
+macro goto label
+position label
+goto
+endmacro
+
+macro unify type val
+quote type val
+unify
+endmacro
+
+$goto main
+
+:testing
+$unify int 1
+goto
+
+:main
+call testing
+var x
+endcall
+
+$println x

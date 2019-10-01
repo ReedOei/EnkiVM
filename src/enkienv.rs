@@ -297,7 +297,7 @@ impl Environment {
         return self.unified.get(v).ok_or(Err::new(format!("Unification doesn't exist for {}", v)));
     }
 
-    fn traverse_unified<T>(&self, v: &String, default: Result<T, Err>, action: &Fn(&Unification) -> Result<Option<T>, Err>) -> Result<T, Err> {
+    fn traverse_unified<T>(&self, v: &String, default: Result<T, Err>, action: &dyn Fn(&Unification) -> Result<Option<T>, Err>) -> Result<T, Err> {
         let mut to_check = VecDeque::new();
         to_check.push_front(v);
 

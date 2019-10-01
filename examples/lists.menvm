@@ -1,0 +1,135 @@
+macro printstr x
+quote str x
+print
+endmacro
+
+macro println x
+var x
+print
+$printstr "\n"
+endmacro
+
+macro goto label
+position label
+goto
+endmacro
+
+macro gotochoice label
+position label
+gotochoice
+endmacro
+
+macro functor name arg_num
+quote int arg_num
+quote str name
+functor
+endmacro
+
+macro call_cons val
+quote int val
+$functor "cons" 2
+endmacro
+
+macro empty_list
+$functor "empty" 0
+endmacro
+
+macro unify type val
+quote type val
+unify
+endmacro
+
+$goto main
+
+:length
+
+$gotochoice cons_case
+
+:empty_case # L Arg
+$empty_list
+unify
+$unify int 0
+goto
+
+:cons_case # L Arg
+fresh # L Arg X
+dup # L Arg X X
+rot # L X Arg X
+fresh # L X Arg X Y
+dup # L X Arg X Y Y
+rot # L X Arg Y X Y
+swap # L X Arg Y Y X
+$functor "cons" 2
+rot # L X cons(X,Y) Arg Y
+rot # L X Y cons(X,Y) Arg
+unify # L X Y
+swap # L Y X
+destroy # L Y
+fresh # L Y NewL
+dup # L Y NewL NewL
+rot # L NewL Y NewL
+swap # L NewL NewL Y
+call length
+rot # L NewL Pos NewL Y
+endcall
+dup # L NewL NewL
+rot # NewL L NewL
+int 1 # NewL L NewL 1
+add # NewL L (NewL + 1)
+unify # ReturnPos NewL
+destroy
+goto # Return
+
+:printlist
+
+$gotochoice cons_case_print
+
+:empty_case_print
+$empty_list
+unify
+$printstr "\n"
+goto
+
+:cons_case_print # L
+fresh # L T
+dup # L T T
+rot # T L T
+fresh # T L T H
+dup # T L T H H
+rot # T L H T H
+$functor "cons" 2
+rot # T cons(H,T) L H
+rot # T H cons(H,T) L
+unify # T H
+dup
+print
+destroy
+$printstr ","
+call printlist
+swap
+endcall
+goto
+
+:main
+# Build the list: [90,28,14,12]
+$empty_list
+$call_cons 12
+$call_cons 14
+$call_cons 28
+$call_cons 90
+# [90,28,14,12]
+call length
+swap
+var L
+swap
+endcall
+$println L
+
+call length
+int 10
+var List10
+endcall
+
+call printlist
+var List10
+endcall
