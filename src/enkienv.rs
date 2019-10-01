@@ -28,6 +28,18 @@ impl Environment {
         }
     }
 
+    pub fn destroy(&mut self) -> Result<(), Err> {
+        match self.pop()? {
+            StackItem::Variable(var_name) => {
+                self.unified.remove(&var_name);
+            }
+
+            _ => {} // Everything else just gets popped.
+        }
+
+        return Ok(());
+    }
+
     pub fn print_stack(&mut self) -> Result<(), Err> {
         println!("{:?}", self.data);
         return Ok(());
@@ -81,33 +93,13 @@ impl Environment {
     }
 
     fn var_value_opt(&self, var_name: &String) -> Result<Option<Value>, Err> {
-        let mut to_check = VecDeque::new();
-        to_check.push_front(var_name);
-        let mut checked = HashSet::new();
-
-        loop {
-            match to_check.pop_front() {
-                Some(var_name) => {
-                    if checked.contains(var_name) {
-                        continue;
-                    }
-                    checked.insert(var_name);
-
-                    let unification = self.get_unified(var_name)?;
-
-                    match &unification.value_unify {
-                        Some(c) => return Ok(Some(c.clone())),
-                        None => {}
-                    }
-
-                    to_check.extend(&unification.var_unify);
-                },
-
-                None => break
-            }
-        }
-
-        return Ok(None);
+        return self.traverse_unified(var_name, Ok(None),
+            &|unification| {
+                match &unification.value_unify {
+                    Some(c) => return Ok(Some(Some(c.clone()))),
+                    None => return Ok(None)
+                }
+            } );
     }
 
     fn var_value(&self, var_name: &String) -> Result<Value, Err> {
@@ -305,39 +297,10 @@ impl Environment {
         return self.unified.get(v).ok_or(Err::new(format!("Unification doesn't exist for {}", v)));
     }
 
-    fn is_disunified(&self, v1: &String, v2: &String) -> Result<bool, Err> {
-        let mut to_check = VecDeque::new();
-        to_check.push_front(v2);
-        let mut checked = HashSet::new();
-
-        loop {
-            match to_check.pop_front() {
-                Some(var_name) => {
-                    if checked.contains(var_name) {
-                        continue;
-                    }
-                    checked.insert(var_name);
-
-                    let unification = self.get_unified(var_name)?;
-
-                    if unification.var_disunify.contains(v1) {
-                        return Ok(true);
-                    }
-
-                    to_check.extend(&unification.var_unify);
-                },
-
-                None => break
-            }
-        }
-
-        return Ok(false);
-    }
-
-
-    fn is_disunified_value(&self, v: &String, c: &Value) -> Result<bool, Err> {
+    fn traverse_unified<T>(&self, v: &String, default: Result<T, Err>, action: &Fn(&Unification) -> Result<Option<T>, Err>) -> Result<T, Err> {
         let mut to_check = VecDeque::new();
         to_check.push_front(v);
+
         let mut checked = HashSet::new();
 
         loop {
@@ -350,16 +313,8 @@ impl Environment {
 
                     let unification = self.get_unified(var_name)?;
 
-                    for check_value in &unification.value_disunify {
-                        if check_value == c {
-                            return Ok(true);
-                        }
-                    }
-
-                    match &unification.value_unify {
-                        Some(cur_c) => {
-                            return Ok(cur_c != c);
-                        },
+                    match action(unification)? {
+                        Some(res) => return Ok(res),
                         None => {}
                     }
 
@@ -370,74 +325,65 @@ impl Environment {
             }
         }
 
-        return Ok(false);
+        return default;
+    }
+
+    fn is_disunified(&self, v1: &String, v2: &String) -> Result<bool, Err> {
+        return self.traverse_unified(v2, Ok(false),
+            &|unification| {
+                if unification.var_disunify.contains(v1) {
+                    return Ok(Some(true));
+                } else {
+                    return Ok(None);
+                }
+            } );
+    }
+
+    fn is_disunified_value(&self, v: &String, c: &Value) -> Result<bool, Err> {
+        return self.traverse_unified(v, Ok(false),
+            &|unification| {
+                for check_value in &unification.value_disunify {
+                    if check_value == c {
+                        return Ok(Some(true));
+                    }
+                }
+
+                match &unification.value_unify {
+                    Some(cur_c) => {
+                        return Ok(Some(cur_c != c));
+                    },
+                    None => Ok(None)
+                }
+            } );
     }
 
     fn is_unified(&self, v1: &String, v2: &String) -> Result<bool, Err> {
-        let mut to_check = VecDeque::new();
-        to_check.push_front(v2);
-        let mut checked = HashSet::new();
-
-        loop {
-            match to_check.pop_front() {
-                Some(var_name) => {
-                    if checked.contains(var_name) {
-                        continue;
-                    }
-                    checked.insert(var_name);
-
-                    let unification = self.get_unified(var_name)?;
-
-                    if unification.var_unify.contains(v1) {
-                        return Ok(true);
-                    }
-
-                    to_check.extend(&unification.var_unify);
-                },
-
-                None => break
-            }
-        }
-
-        return Ok(false);
+        return self.traverse_unified(v2, Ok(false),
+            &|unification| {
+                if unification.var_unify.contains(v1) {
+                    return Ok(Some(true));
+                } else {
+                    return Ok(None);
+                }
+            });
     }
 
     fn is_unified_value(&self, v: &String, c: &Value) -> Result<bool, Err> {
-        let mut to_check = VecDeque::new();
-        to_check.push_front(v);
-        let mut checked = HashSet::new();
-
-        loop {
-            match to_check.pop_front() {
-                Some(var_name) => {
-                    if checked.contains(var_name) {
-                        continue;
+        return self.traverse_unified(v, Ok(false),
+            &|unification| {
+                for check_value in &unification.value_disunify {
+                    if check_value == c {
+                        return Ok(Some(false));
                     }
-                    checked.insert(var_name);
+                }
 
-                    let unification = self.get_unified(var_name)?;
-
-                    for check_value in &unification.value_disunify {
-                        if check_value == c {
-                            return Ok(false);
-                        }
-                    }
-
-                    match &unification.value_unify {
-                        Some(cur_c) => {
-                            return Ok(cur_c == c);
-                        },
-                        None => {}
-                    }
-
-                    to_check.extend(&unification.var_unify);
-                },
-
-                None => break
-            }
-        }
-
-        return Ok(false);
+                match &unification.value_unify {
+                    Some(cur_c) => {
+                        return Ok(Some(cur_c == c));
+                    },
+                    None => return Ok(None)
+                }
+            });
     }
 
     fn unify_with(&mut self, v1: &String, v2: &String) -> Result<(), Err> {

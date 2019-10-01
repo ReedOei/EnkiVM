@@ -49,7 +49,8 @@ pub enum Instr {
     Rot,
     Over,
     PrintStack,
-    PrintUnification
+    PrintUnification,
+    Destroy
 }
 
 fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
@@ -81,6 +82,7 @@ fn execute(instrs: Vec<Instr>, debug: bool) -> Result<(), Err> {
             Instr::NameOf  => env.nameof(),
             Instr::Functor => env.functor(),
             Instr::Swap    => env.swap(),
+            Instr::Destroy => env.destroy(),
             Instr::Add  => env.add(),
             Instr::Sub => env.sub(),
             Instr::Mul => env.mul(),
@@ -255,6 +257,8 @@ fn load_instrs(filename: String) -> Option<Vec<Instr>> {
             instrs.push(Instr::PrintStack);
         } else if opcode == "printunification" {
             instrs.push(Instr::PrintUnification);
+        } else if opcode == "destroy" {
+            instrs.push(Instr::Destroy);
         } else {
             println!("Unknown opcode '{}' in: '{}'", opcode, line_str);
             error = true;

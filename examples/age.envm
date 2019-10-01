@@ -17,7 +17,7 @@ goto
 :age_fact_0
 position age_fact_1
 gotochoice
-str reed
+str "reed"
 unify
 int 20
 unify
@@ -26,7 +26,7 @@ goto
 :age_fact_1
 position age_fact_2
 gotochoice
-str meg
+str "meg"
 unify
 int 21
 unify
@@ -41,7 +41,7 @@ fail
 :main
 
 var name
-str meg
+str "meg"
 unify
 
 position aftercall
@@ -53,10 +53,10 @@ goto
 :aftercall
 var name
 print
-str \n
+str "\n"
 print
 var age
 print
-str \n
+str "\n"
 print
 

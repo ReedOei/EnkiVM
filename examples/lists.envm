@@ -17,16 +17,20 @@ goto
 
 :cons_case # L Arg
 fresh # L Arg X
-fresh # L Arg X Y
-dup # L Arg X Y Y
-rot # L Arg Y X Y
-swap
+dup # L Arg X X
+rot # L X Arg X
+fresh # L X Arg X Y
+dup # L X Arg X Y Y
+rot # L X Arg Y X Y
+swap # L X Arg Y Y X
 int 2
 str "cons"
-functor # L Arg Y cons(X,Y)
-rot # L cons(X,Y) Arg Y
-rot # L Y cons(X,Y) Arg
-unify # L Y
+functor # L X Arg Y cons(X,Y)
+rot # L X cons(X,Y) Arg Y
+rot # L X Y cons(X,Y) Arg
+unify # L X Y
+swap # L Y X
+destroy # L Y
 fresh # L Y NewL
 dup # L Y NewL NewL
 rot # L NewL Y NewL
@@ -34,11 +38,14 @@ swap # L NewL NewL Y
 position after_rec_length_call # L NewL NewL Y Pos
 rot # L NewL Pos NewL Y
 position length
-goto # After call: L NewL
-:after_rec_length_call
-int 1 # L NewL 1
-add # L (NewL + 1)
-unify # ReturnPos
+goto
+:after_rec_length_call # After call: L NewL
+dup # L NewL NewL
+rot # NewL L NewL
+int 1 # NewL L NewL 1
+add # NewL L (NewL + 1)
+unify # ReturnPos NewL
+destroy
 goto # Return
 
 :printlist
@@ -68,7 +75,9 @@ functor # T L H cons(H,T)
 rot # T cons(H,T) L H
 rot # T H cons(H,T) L
 unify # T H
+dup
 print
+destroy
 str ","
 print
 position after_call_print
